@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Mini Web Paint App (Fixed Mobile Touch & UI)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+    body { 
+      display: flex; 
+      flex-direction: column; 
+      height: 100dvh; /* Menggunakan dynamic viewport agar pas di layar HP */
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+      background: #222222; 
+      color: #fff; 
+      overflow: hidden; 
+    }
+    
+    /* --- HEADER / TOP BAR --- */
+    #top-bar {
+      height: 48px;
+      background: #2d2d2d;
+      border-bottom: 1px solid #1a1a1a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      z-index: 30;
+      flex-shrink: 0;
+    }
+    .top-left, .top-right, .top-center {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .top-bar-btn {
+      background: #3a3a3a;
+      border: none;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .top-bar-btn:active { background: #555; }
+    .top-bar-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* --- WORKSPACE UTAMA --- */
+    #workspace {
+      flex: 1;
+      position: relative;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Container Kanvas */
+    #canvas-container { 
+      flex: 1; 
+      position: relative; 
+      background: #181818; 
+      overflow: hidden; 
+      cursor: crosshair;
+      touch-action: none; /* Wajib untuk handle gesture kustom di HP */
+    }
+    
+    #viewport {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      transform-origin: 0 0;
+    }
+
+    #canvas-paper {
+      position: absolute;
+      width: 800px;
+      height: 600px;
+      background-color: #ffffff;
+      background-image: linear-gradient(45deg, #e0e0e0 25%, transparent 25%), 
+                        linear-gradient(-45deg, #e0e0e0 25%, transparent 25%), 
+                        linear-gradient(45deg, transparent 75%, #e0e0e0 75%), 
+                        linear-gradient(-45deg, transparent 75%, #e0e0e0 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.8);
+    }
+
+    #paper-background {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #ffffff;
+      z-index: 0;
+    }
+
+    canvas { position: absolute; top: 0; left: 0; background: transparent; touch-action: none; }
+
+    /* --- FLOATING PANELS --- */
+    .floating-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 300px;
+      max-height: calc(100% - 20px);
+      background: rgba(43, 43, 43, 0.95);
+      backdrop-filter: blur(5px);
+      border: 1px solid #444;
+      border-radius: 8px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      overflow-y: auto;
+    }
+    .floating-panel.active { display: flex; }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #555;
+      padding-bottom: 6px;
+      font-weight: bold;
+      font-size: 14px;
+    }
+    .close-panel-btn {
+      background: transparent;
+      border: none;
+      color: #ff5555;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 0 4px;
+    }
+
+    /* --- BOTTOM TOOLBAR --- */
+    #bottom-toolbar {
+      height: 60px;
+      background: #2b2b2b;
+      border-top: 1px solid #1a1a1a;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 0 5px;
+      z-index: 30;
+      flex-shrink: 0;
+    }
+    .tool-icon-btn {
+      background: transparent;
+      border: none;
+      color: #ccc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      font-size: 10px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+    .tool-icon-btn span.icon { font-size: 20px; }
+    .tool-icon-btn.active { color: #33b5e5; background: rgba(0, 122, 204, 0.2); }
+    .tool-icon-btn:active { background: rgba(255,255,255,0.1); }
+
+    .group { background: #363636; padding: 8px; border-radius: 6px; display: flex; flex-direction: column; gap: 6px; }
+    label { font-size: 12px; color: #bbb; }
+    input[type="range"], select, input[type="color"], input[type="number"] { width: 100%; }
+    input[type="number"] { background: #222; color: #fff; border: 1px solid #555; padding: 6px; border-radius: 4px; font-size: 12px; }
+    .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .btn-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    button.panel-btn { padding: 8px; background: #4a4a4a; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    button.panel-btn:hover { background: #5a5a5a; }
+    button.panel-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.panel-btn.active { background: #007acc; }
+    
+    #layer-list { max-height: 180px; overflow-y: auto; background: #222; border: 1px solid #444; padding: 4px; font-size: 12px; border-radius: 4px; }
+    .layer-item, .folder-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 6px; margin-bottom: 2px; background: #3a3a3a; cursor: pointer; border-radius: 3px; }
+    .layer-item.active { background: #005999; }
+    .folder-item { background: #2d4a60; font-weight: bold; }
+    .layer-item input[type="text"] { background: #222; color: #fff; border: 1px solid #007acc; padding: 4px; font-size: 12px; width: 100%; border-radius: 2px; }
+    input[type="file"] { display: none; }
+  </style>
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <div id="top-bar">
+    <div class="top-left">
+      <button class="top-bar-btn" onclick="togglePanel('panel-file')">📁 File</button>
+      <button class="top-bar-btn" id="btn-undo" onclick="undo()" disabled>↶</button>
+      <button class="top-bar-btn" id="btn-redo" onclick="redo()" disabled>↷</button>
+    </div>
+    <div class="top-center">
+      <button class="top-bar-btn" onclick="togglePanel('panel-canvas')">📐 Kanvas</button>
+    </div>
+    <div class="top-right">
+      <button class="top-bar-btn" style="background:#007acc;" onclick="togglePanel('panel-layers')">📑 Layer</button>
+    </div>
+  </div>
+
+  <!-- WORKSPACE -->
+  <div id="workspace">
+    <div id="canvas-container">
+      <div id="viewport">
+        <div id="canvas-paper">
+          <div id="paper-background"></div>
+          <canvas id="ruler-canvas" width="800" height="600" style="z-index: 999;"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL FILE -->
+    <div id="panel-file" class="floating-panel">
+      <div class="panel-header"><span>File & Project</span><button class="close-panel-btn" onclick="togglePanel('panel-file')">✕</button></div>
+      <div class="group">
+        <div class="btn-grid">
+          <button class="panel-btn" style="background: #28a745;" onclick="saveProject()">💾 Save</button>
+          <button class="panel-btn" style="background: #17a2b8;" onclick="document.getElementById('project-input').click()">📂 Open</button>
+        </div>
+        <input type="file" id="project-input" accept=".paint,.json" onchange="loadProject(event)">
+        <div class="btn-grid" style="margin-top: 4px;">
+          <button class="panel-btn" onclick="exportImage('png')">🖼️ PNG</button>
+          <button class="panel-btn" onclick="exportImage('jpeg')">🖼️ JPG</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL KANVAS -->
+    <div id="panel-canvas" class="floating-panel">
+      <div class="panel-header"><span>Canvas & View</span><button class="close-panel-btn" onclick="togglePanel('panel-canvas')">✕</button></div>
+      <div class="group">
+        <label>Canvas Size (px)</label>
+        <div class="btn-grid">
+          <div><label style="font-size: 10px;">Width:</label><input type="number" id="canvas-width" value="800" min="100" max="4000"></div>
+          <div><label style="font-size: 10px;">Height:</label><input type="number" id="canvas-height" value="600" min="100" max="4000"></div>
+        </div>
+        <button class="panel-btn" style="background: #007acc; margin-top: 2px;" onclick="applyCanvasSize()">📐 Apply Size</button>
+        
+        <label style="margin-top:6px;">Zoom</label>
+        <div class="btn-grid-3">
+          <button class="panel-btn" onclick="zoomIn()">🔍 +</button>
+          <button class="panel-btn" onclick="zoomOut()">🔍 -</button>
+          <button class="panel-btn" onclick="resetZoom()">100%</button>
+        </div>
+        <label style="margin-top:6px;"><input type="checkbox" id="toggle-paper" checked onchange="togglePaper(this.checked)"> Show White Paper BG</label>
+      </div>
+    </div>
+
+    <!-- PANEL BRUSH -->
+    <div id="panel-brush" class="floating-panel">
+      <div class="panel-header"><span>Brush Settings</span><button class="close-panel-btn" onclick="togglePanel('panel-brush')">✕</button></div>
+      <div class="group">
+        <label>Color: <input type="color" id="brush-color" value="#000000"></label>
+        
+        <!-- Size dengan input manual desimal -->
+        <label>Size: 
+          <input type="number" id="size-num" value="5" min="0.1" max="100" step="0.1" style="width: 60px; background: #222; color: #fff; border: 1px solid #444; padding: 2px 4px; border-radius: 4px;" oninput="syncBrushSize('num', this.value)"> px
+        </label>
+        <input type="range" id="brush-size" min="0.1" max="20" step="0.1" value="5" oninput="syncBrushSize('range', this.value)">
+        
+        <label>Stabilizer: <span id="stab-val">3</span></label>
+        <input type="range" id="stabilizer" min="1" max="10" value="3" oninput="document.getElementById('stab-val').innerText=this.value">
+        <label><input type="checkbox" id="force-fade" onchange="toggleFadeSettings(this.checked)"> Force Fade Out</label>
+        
+        <div id="fade-settings-container" style="display:none; flex-direction:column; gap:4px; margin-top:4px; padding-left:10px; border-left:2px solid #007acc;">
+          <label>Start Fade: <span id="start-fade-val">20</span>%</label>
+          <input type="range" id="start-fade-pct" min="0" max="50" value="20" oninput="document.getElementById('start-fade-val').innerText=this.value">
+          <label>End Fade: <span id="end-fade-val">20</span>%</label>
+          <input type="range" id="end-fade-pct" min="0" max="50" value="20" oninput="document.getElementById('end-fade-val').innerText=this.value">
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL RULER -->
+    <div id="panel-ruler" class="floating-panel">
+      <div class="panel-header"><span>Ruler System</span><button class="close-panel-btn" onclick="togglePanel('panel-ruler')">✕</button></div>
+      <div class="group">
+        <select id="ruler-type" onchange="setRuler(this.value)">
+          <option value="none">Off</option>
+          <option value="straight">Straight Line</option>
+          <option value="circle">Circle</option>
+          <option value="symmetry">Symmetry (Mirror)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- PANEL LAYERS -->
+    <div id="panel-layers" class="floating-panel">
+      <div class="panel-header"><span>Layers</span><button class="close-panel-btn" onclick="togglePanel('panel-layers')">✕</button></div>
+      <div class="group">
+        <div class="btn-grid">
+          <button class="panel-btn" onclick="addLayer()">+ Layer</button>
+          <button class="panel-btn" onclick="addFolder()">+ Folder</button>
+        </div>
+        <button class="panel-btn" style="margin-top: 4px;" onclick="document.getElementById('img-input').click()">📷 Import Image</button>
+        <input type="file" id="img-input" accept="image/*" onchange="importImage(event)">
+        <div class="btn-grid" style="margin-top: 4px;">
+          <button class="panel-btn" onclick="moveLayerUp()">▲ Up</button>
+          <button class="panel-btn" onclick="moveLayerDown()">▼ Down</button>
+        </div>
+        <div class="btn-grid" style="margin-top: 4px;">
+          <button class="panel-btn" onclick="renameActiveLayer()">✏️ Rename</button>
+          <button class="panel-btn" style="background: #900;" onclick="deleteLayer()">🗑️ Delete</button>
+        </div>
+        <label style="margin-top:5px;">Opacity: <span id="opacity-val">100</span>%</label>
+        <input type="range" id="layer-opacity" min="0" max="100" value="100" oninput="changeOpacity(this.value)">
+        <div id="layer-list" style="margin-top: 5px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM TOOLBAR -->
+  <div id="bottom-toolbar">
+    <button id="btn-brush" class="tool-icon-btn active" onclick="setTool('brush')"><span class="icon">🖌️</span><span>Brush</span></button>
+    <button id="btn-eraser" class="tool-icon-btn" onclick="setTool('eraser')"><span class="icon">🧹</span><span>Eraser</span></button>
+    <button class="tool-icon-btn" onclick="togglePanel('panel-brush')"><span class="icon">⚙️</span><span>Settings</span></button>
+    <button class="tool-icon-btn" onclick="togglePanel('panel-ruler')"><span class="icon">📏</span><span>Ruler</span></button>
+    <button id="btn-transform" class="tool-icon-btn" onclick="setTool('transform')"><span class="icon">🔀</span><span>Move</span></button>
+    <button id="btn-pan" class="tool-icon-btn" onclick="setTool('pan')"><span class="icon">🖐️</span><span>Pan</span></button>
+  </div>
+
+<script>
+let WIDTH = 800, HEIGHT = 600;
+const container = document.getElementById('canvas-container');
+const viewport = document.getElementById('viewport');
+const paper = document.getElementById('canvas-paper');
+const paperBg = document.getElementById('paper-background');
+const rulerCanvas = document.getElementById('ruler-canvas');
+const rulerCtx = rulerCanvas.getContext('2d');
+
+let tools = { current: 'brush', ruler: 'none' };
+let items = [];
+let activeLayer = null;
+let points = [];        
+let strokePoints = [];  
+let isDrawing = false;
+let startPos = { x: 0, y: 0 };
+let currentMousePos = { x: 0, y: 0 };
+
+// --- STATE ZOOM & PAN MULTI-TOUCH ---
+let zoomScale = 1;
+let panX = 0, panY = 0;
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
+let isSpacePressed = false;
+
+// Active pointers tracker untuk multi-touch (2 jari zoom/pan)
+let activePointers = new Map();
+let initialPinchDist = null;
+let initialPinchScale = 1;
+let lastMidpoint = { x: 0, y: 0 };
+
+// State Transform Layer
+let isTransforming = false;
+let isResizing = false;
+let transformStart = { x: 0, y: 0 };
+
+// --- SYSTEM UNDO / REDO ---
+const MAX_HISTORY = 30;
+let undoStack = [];
+let redoStack = [];
+
+let symmetryX = WIDTH / 2; // Default di tengah canvas
+let isDraggingSymmetry = false;
+
+function togglePanel(panelId) {
+  const panel = document.getElementById(panelId);
+  const isActive = panel.classList.contains('active');
+  document.querySelectorAll('.floating-panel').forEach(p => p.classList.remove('active'));
+  if (!isActive) panel.classList.add('active');
+}
+
+function saveState() {
+  if (!activeLayer) return;
+  const imgData = activeLayer.ctx.getImageData(0, 0, WIDTH, HEIGHT);
+  undoStack.push({ layerId: activeLayer.id, data: imgData });
+  if (undoStack.length > MAX_HISTORY) undoStack.shift();
+  redoStack = [];
+  updateUndoRedoUI();
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+  commitTransform();
+  const lastState = undoStack.pop();
+  const targetLayer = items.find(item => item.id === lastState.layerId);
+  if (targetLayer) {
+    const currentImgData = targetLayer.ctx.getImageData(0, 0, WIDTH, HEIGHT);
+    redoStack.push({ layerId: targetLayer.id, data: currentImgData });
+    targetLayer.ctx.putImageData(lastState.data, 0, 0);
+  }
+  updateUndoRedoUI();
+  drawOverlay();
+}
+
+function redo() {
+  if (redoStack.length === 0) return;
+  commitTransform();
+  const nextState = redoStack.pop();
+  const targetLayer = items.find(item => item.id === nextState.layerId);
+  if (targetLayer) {
+    const currentImgData = targetLayer.ctx.getImageData(0, 0, WIDTH, HEIGHT);
+    undoStack.push({ layerId: targetLayer.id, data: currentImgData });
+    targetLayer.ctx.putImageData(nextState.data, 0, 0);
+  }
+  updateUndoRedoUI();
+  drawOverlay();
+}
+
+function updateUndoRedoUI() {
+  document.getElementById('btn-undo').disabled = undoStack.length === 0;
+  document.getElementById('btn-redo').disabled = redoStack.length === 0;
+}
+
+function resizeCanvasDimensions(newW, newH) {
+  commitTransform();
+  WIDTH = newW;
+  HEIGHT = newH;
+  paper.style.width = `${WIDTH}px`;
+  paper.style.height = `${HEIGHT}px`;
+  rulerCanvas.width = WIDTH;
+  rulerCanvas.height = HEIGHT;
+  items.forEach(item => {
+    if (item.type === 'layer') {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = item.canvas.width; tempCanvas.height = item.canvas.height;
+      tempCanvas.getContext('2d').drawImage(item.canvas, 0, 0);
+      item.canvas.width = WIDTH; item.canvas.height = HEIGHT;
+      item.ctx.drawImage(tempCanvas, 0, 0);
+    }
+  });
+  undoStack = []; redoStack = [];
+  updateUndoRedoUI();
+  resetZoom();
+  drawOverlay();
+}
+
+function applyCanvasSize() {
+  const wInput = parseInt(document.getElementById('canvas-width').value);
+  const hInput = parseInt(document.getElementById('canvas-height').value);
+  if (!isNaN(wInput) && !isNaN(hInput) && wInput >= 100 && hInput <= 4000) {
+    resizeCanvasDimensions(wInput, hInput);
+    togglePanel('panel-canvas');
+  }
+}
+
+function updateViewportTransform() {
+  viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomScale})`;
+}
+
+function resetZoom() {
+  zoomScale = 1;
+  const rect = container.getBoundingClientRect();
+  panX = (rect.width - WIDTH) / 2;
+  panY = (rect.height - HEIGHT) / 2;
+  updateViewportTransform();
+}
+
+function zoomIn() { zoomScale = Math.min(zoomScale * 1.2, 5); updateViewportTransform(); }
+function zoomOut() { zoomScale = Math.max(zoomScale / 1.2, 0.2); updateViewportTransform(); }
+function togglePaper(show) { paperBg.style.display = show ? 'block' : 'none'; }
+
+container.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+  const newScale = Math.min(Math.max(zoomScale * zoomFactor, 0.2), 5);
+  const rect = container.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+  panX = mouseX - (mouseX - panX) * (newScale / zoomScale);
+  panY = mouseY - (mouseY - panY) * (newScale / zoomScale);
+  zoomScale = newScale;
+  updateViewportTransform();
+}, { passive: false });
+
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space' && !isSpacePressed) { isSpacePressed = true; container.style.cursor = 'grab'; }
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key.toLowerCase() === 'z') { if (e.shiftKey) redo(); else undo(); e.preventDefault(); }
+    else if (e.key.toLowerCase() === 'y') { redo(); e.preventDefault(); }
+    else if (e.key.toLowerCase() === 's') { e.preventDefault(); saveProject(); }
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  if (e.code === 'Space') { isSpacePressed = false; container.style.cursor = 'crosshair'; }
+});
+
+function init() { resetZoom(); addLayer("Main"); }
+
+let idCounter = 0;
+function addLayer(name = null) {
+  commitTransform();
+  const canvas = document.createElement('canvas');
+  canvas.width = WIDTH; canvas.height = HEIGHT;
+  paper.appendChild(canvas);
+  const layer = {
+    id: ++idCounter,
+    name: name || `Layer ${idCounter}`,
+    type: 'layer',
+    canvas: canvas,
+    ctx: canvas.getContext('2d'),
+    opacity: 1.0,
+    visible: true,
+    transform: null
+  };
+  items.push(layer);
+  activeLayer = layer;
+  updateZIndices();
+  renderLayerUI();
+}
+
+function addFolder() {
+  const folder = { id: ++idCounter, name: `Folder ${idCounter}`, type: 'folder', children: [], visible: true };
+  items.push(folder);
+  renderLayerUI();
+}
+
+function deleteLayer() {
+  if (!activeLayer || items.length <= 1) return;
+  saveState();
+  paper.removeChild(activeLayer.canvas);
+  items = items.filter(item => item.id !== activeLayer.id);
+  activeLayer = items.filter(item => item.type === 'layer').pop() || null;
+  updateZIndices();
+  renderLayerUI();
+  drawOverlay();
+}
+
+function changeOpacity(val) {
+  if (!activeLayer) return;
+  activeLayer.opacity = val / 100;
+  activeLayer.canvas.style.opacity = activeLayer.opacity;
+  document.getElementById('opacity-val').innerText = val;
+}
+
+function moveLayerUp() {
+  if (!activeLayer) return;
+  const idx = items.findIndex(item => item.id === activeLayer.id);
+  if (idx < items.length - 1) {
+    const temp = items[idx]; items[idx] = items[idx + 1]; items[idx + 1] = temp;
+    updateZIndices(); renderLayerUI();
+  }
+}
+
+function moveLayerDown() {
+  if (!activeLayer) return;
+  const idx = items.findIndex(item => item.id === activeLayer.id);
+  if (idx > 0) {
+    const temp = items[idx]; items[idx] = items[idx - 1]; items[idx - 1] = temp;
+    updateZIndices(); renderLayerUI();
+  }
+}
+
+function renameActiveLayer() {
+  if (!activeLayer) return;
+  const newName = prompt("Masukkan nama baru untuk layer:", activeLayer.name);
+  if (newName && newName.trim() !== '') { activeLayer.name = newName.trim(); renderLayerUI(); }
+}
+
+function updateZIndices() {
+  items.forEach((item, index) => { if (item.canvas) item.canvas.style.zIndex = index + 1; });
+}
+
+function renderLayerUI() {
+  const list = document.getElementById('layer-list');
+  list.innerHTML = '';
+  [...items].reverse().forEach(item => {
+    const div = document.createElement('div');
+    div.className = item.type === 'folder' ? 'folder-item' : 'layer-item';
+    if (activeLayer && activeLayer.id === item.id) div.classList.add('active');
+    
+    // Tombol Hide/Show (Ikon Mata)
+    const visibilityIcon = item.visible ? '👁️' : '🚫';
+    const opacityStyle = item.visible ? '' : 'opacity: 0.4;';
+
+    div.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 6px; ${opacityStyle}">
+        <button style="background:none; border:none; cursor:pointer; font-size:14px;" onclick="toggleLayerVisibility(items.find(i => i.id === ${item.id}), event)">${visibilityIcon}</button>
+        <span>${item.type === 'folder' ? '📁' : '📄'} <span class="layer-name-text">${item.name}</span></span>
+      </div>
+    `;
+
+    div.onclick = () => {
+      if (item.type === 'layer' && activeLayer !== item) { 
+        commitTransform(); activeLayer = item; 
+        document.getElementById('layer-opacity').value = activeLayer.opacity * 100;
+        document.getElementById('opacity-val').innerText = Math.round(activeLayer.opacity * 100);
+        if (tools.current === 'transform') startTransformMode();
+        renderLayerUI(); drawOverlay();
+      }
+    };
+    div.ondblclick = (e) => {
+      e.stopPropagation();
+      const nameSpan = div.querySelector('.layer-name-text');
+      const input = document.createElement('input');
+      input.type = 'text'; input.value = item.name;
+      nameSpan.replaceWith(input); input.focus(); input.select();
+      const finishRename = () => { const val = input.value.trim(); if (val) item.name = val; renderLayerUI(); };
+      input.onblur = finishRename;
+      input.onkeydown = (ev) => { if (ev.key === 'Enter') finishRename(); if (ev.key === 'Escape') renderLayerUI(); };
+    };
+    list.appendChild(div);
+  });
+}
+
+function saveProject() {
+  commitTransform();
+  const projectData = {
+    width: WIDTH, height: HEIGHT,
+    items: items.map(item => item.type === 'folder' ? 
+      { id: item.id, name: item.name, type: 'folder', visible: item.visible } : 
+      { id: item.id, name: item.name, type: 'layer', opacity: item.opacity, visible: item.visible, dataUrl: item.canvas.toDataURL() })
+  };
+  const blob = new Blob([JSON.stringify(projectData)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `artwork_${Date.now()}.paint`; a.click();
+  togglePanel('panel-file');
+}
+
+function loadProject(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const project = JSON.parse(event.target.result);
+      items.forEach(item => { if (item.canvas) paper.removeChild(item.canvas); });
+      items = []; activeLayer = null; undoStack = []; redoStack = []; updateUndoRedoUI();
+      WIDTH = project.width || 800; HEIGHT = project.height || 600;
+      document.getElementById('canvas-width').value = WIDTH;
+      document.getElementById('canvas-height').value = HEIGHT;
+      paper.style.width = `${WIDTH}px`; paper.style.height = `${HEIGHT}px`;
+      rulerCanvas.width = WIDTH; rulerCanvas.height = HEIGHT;
+      let loadedCount = 0;
+      const totalLayers = project.items.filter(i => i.type === 'layer').length;
+      project.items.forEach(itemData => {
+        if (itemData.type === 'folder') {
+          items.push({ id: itemData.id, name: itemData.name, type: 'folder', children: [], visible: itemData.visible });
+        } else {
+          const canvas = document.createElement('canvas');
+          canvas.width = WIDTH; canvas.height = HEIGHT; canvas.style.opacity = itemData.opacity;
+          paper.appendChild(canvas);
+          const ctx = canvas.getContext('2d');
+          const img = new Image();
+          const layerObj = { id: itemData.id, name: itemData.name, type: 'layer', canvas, ctx, opacity: itemData.opacity, visible: itemData.visible, transform: null };
+          img.onload = () => {
+            ctx.drawImage(img, 0, 0); loadedCount++;
+            if (loadedCount === totalLayers) { updateZIndices(); renderLayerUI(); resetZoom(); drawOverlay(); }
+          };
+          img.src = itemData.dataUrl;
+          items.push(layerObj); activeLayer = layerObj;
+        }
+      });
+      idCounter = Math.max(...project.items.map(i => i.id), 0);
+      if (totalLayers === 0) { updateZIndices(); renderLayerUI(); resetZoom(); }
+      togglePanel('panel-file');
+    } catch (err) { alert("Format file project tidak valid!"); }
+  };
+  reader.readAsText(file); e.target.value = '';
+}
+
+function exportImage(format = 'png') {
+  commitTransform();
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = WIDTH; exportCanvas.height = HEIGHT;
+  const exportCtx = exportCanvas.getContext('2d');
+  if (format === 'jpeg' || document.getElementById('toggle-paper').checked) {
+    exportCtx.fillStyle = '#ffffff'; exportCtx.fillRect(0, 0, WIDTH, HEIGHT);
+  }
+  items.forEach(item => { if (item.type === 'layer' && item.visible) { exportCtx.globalAlpha = item.opacity; exportCtx.drawImage(item.canvas, 0, 0); } });
+  const a = document.createElement('a');
+  a.href = exportCanvas.toDataURL(`image/${format}`, 0.95); a.download = `export_artwork.${format}`; a.click();
+  togglePanel('panel-file');
+}
+
+function importImage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const img = new Image();
+    img.onload = () => {
+      addLayer("Imported Image");
+      let scale = Math.min(WIDTH / img.width, HEIGHT / img.height, 1);
+      activeLayer.ctx.drawImage(img, (WIDTH - img.width * scale) / 2, (HEIGHT - img.height * scale) / 2, img.width * scale, img.height * scale);
+      setTool('transform');
+    };
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(file); e.target.value = '';
+}
+
+function startTransformMode() {
+  if (!activeLayer || activeLayer.transform) return;
+  const img = new Image();
+  img.src = activeLayer.canvas.toDataURL();
+  img.onload = () => { activeLayer.transform = { bufferImg: img, x: 0, y: 0, width: WIDTH, height: HEIGHT }; drawOverlay(); };
+}
+
+function commitTransform() {
+  if (!activeLayer || !activeLayer.transform) return;
+  const t = activeLayer.transform;
+  activeLayer.ctx.clearRect(0, 0, WIDTH, HEIGHT);
+  activeLayer.ctx.drawImage(t.bufferImg, t.x, t.y, t.width, t.height);
+  activeLayer.transform = null; drawOverlay();
+}
+
+function redrawLayerCanvas(layer) {
+  if (!layer || !layer.transform) return;
+  layer.ctx.clearRect(0, 0, WIDTH, HEIGHT);
+  layer.ctx.drawImage(layer.transform.bufferImg, layer.transform.x, layer.transform.y, layer.transform.width, layer.transform.height);
+}
+
+function setTool(t) {
+  if (tools.current === 'transform' && t !== 'transform') commitTransform();
+  tools.current = t;
+  document.querySelectorAll('#bottom-toolbar button').forEach(b => b.classList.remove('active'));
+  const activeBtn = document.getElementById(`btn-${t}`);
+  if (activeBtn) activeBtn.classList.add('active');
+  if (t === 'transform') startTransformMode();
+  drawOverlay();
+}
+
+function setRuler(r) { tools.ruler = r; drawOverlay(); }
+
+function getMousePos(e) {
+  const rect = paper.getBoundingClientRect();
+  return { x: (e.clientX - rect.left) / zoomScale, y: (e.clientY - rect.top) / zoomScale };
+}
+
+function drawOverlay() {
+  rulerCtx.clearRect(0, 0, WIDTH, HEIGHT);
+  if (tools.ruler === 'symmetry') {
+    // Garis Simetri Utama
+    rulerCtx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
+    rulerCtx.lineWidth = 1.5 / zoomScale;
+    rulerCtx.setLineDash([5 / zoomScale, 5 / zoomScale]);
+    rulerCtx.beginPath(); 
+    rulerCtx.moveTo(symmetryX, 0); 
+    rulerCtx.lineTo(symmetryX, HEIGHT); 
+    rulerCtx.stroke();
+    rulerCtx.setLineDash([]);
+
+    // Handle / Pegangan di bagian atas garis untuk indikator bisa digeser
+    rulerCtx.fillStyle = '#0096ff';
+    rulerCtx.beginPath();
+    rulerCtx.arc(symmetryX, 15 / zoomScale, 6 / zoomScale, 0, Math.PI * 2);
+    rulerCtx.fill();
+  }
+  if (tools.current === 'transform' && activeLayer && activeLayer.transform) {
+    const t = activeLayer.transform;
+    rulerCtx.strokeStyle = '#007acc'; rulerCtx.lineWidth = 2 / zoomScale;
+    rulerCtx.setLineDash([4 / zoomScale, 4 / zoomScale]);
+    rulerCtx.strokeRect(t.x, t.y, t.width, t.height);
+    rulerCtx.setLineDash([]);
+    rulerCtx.fillStyle = '#ff0055';
+    rulerCtx.beginPath(); rulerCtx.arc(t.x + t.width, t.y + t.height, 6 / zoomScale, 0, Math.PI * 2); rulerCtx.fill();
+  }
+  /*if ((tools.current === 'brush' || tools.current === 'eraser') && !isDrawing && activePointers.size === 0) {
+    const size = parseFloat(document.getElementById('brush-size').value);
+    rulerCtx.strokeStyle = tools.current === 'eraser' ? 'rgba(255, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+    rulerCtx.lineWidth = 1 / zoomScale;
+    rulerCtx.beginPath(); rulerCtx.arc(currentMousePos.x, currentMousePos.y, size / 2, 0, Math.PI * 2); rulerCtx.stroke();
+  }*/
+  // --- LINGKARAN HANYA MUNCUL KETIKA ERASER DIGUNAKAN DAN LAYAR DISENTUH/DIKLIK ---
+  if (tools.current === 'eraser' && isDrawing) {
+    const size = parseFloat(document.getElementById('brush-size').value);
+    rulerCtx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+    rulerCtx.lineWidth = 1 / zoomScale;
+    rulerCtx.beginPath(); 
+    rulerCtx.arc(currentMousePos.x, currentMousePos.y, size / 2, 0, Math.PI * 2); 
+    rulerCtx.stroke();
+  }
+}
+
+// --- MULTI-TOUCH POINTER EVENTS (FIX ZOOM & PAN 2 JARI) ---
+container.addEventListener('pointerdown', (e) => {
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (activePointers.size === 2) {
+    isDrawing = false;
+    isPanning = false;
+    const pts = Array.from(activePointers.values());
+    initialPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    initialPinchScale = zoomScale;
+    // Rekam titik tengah awal 2 jari
+    lastMidpoint = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+    return;
+  }
+
+  if (activePointers.size === 1) {
+    const p = getMousePos(e);
+    startPos = p;
+
+    // --- TAMBAHKAN / PINDAHKAN INI KE ATAS ---
+    // Cek jika sedang memakai ruler symmetry dan user mengeklik area garis simetri (handle atas)
+    if (tools.ruler === 'symmetry' && Math.abs(p.x - symmetryX) <= 20 / zoomScale) {
+      isDraggingSymmetry = true;
+      return;
+    }
+    // ------------------------------------------
+
+    if (isSpacePressed || e.button === 1 || tools.current === 'pan') {
+      isPanning = true;
+      panStart = { x: e.clientX - panX, y: e.clientY - panY };
+      container.style.cursor = 'grabbing';
+      return;
+    }
+
+    if (!activeLayer) return;
+
+    if (tools.current === 'transform') {
+      if (!activeLayer.transform) startTransformMode();
+      saveState();
+      const t = activeLayer.transform;
+      if (!t) return;
+      if (Math.hypot(p.x - (t.x + t.width), p.y - (t.y + t.height)) <= 20 / zoomScale) {
+        isResizing = true;
+      } else {
+        isTransforming = true;
+        transformStart = { x: p.x - t.x, y: p.y - t.y };
+      }
+      return;
+    }
+
+    saveState();
+    isDrawing = true;
+    points = [p]; strokePoints = [p];
+    if (tools.current === 'eraser') {
+      drawSegment(p, p);
+      if (tools.ruler === 'symmetry') drawSegment({ x: 2 * symmetryX - p.x, y: p.y }, { x: 2 * symmetryX - p.x, y: p.y });
+    }
+  }
+});
+
+container.addEventListener('pointermove', (e) => {
+  if (!activePointers.has(e.pointerId)) return;
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  // 1. GESTUR 2 JARI: PINCH ZOOM & PAN
+  // 1. GESTUR 2 JARI: PINCH ZOOM & PAN
+  if (activePointers.size === 2) {
+    const pts = Array.from(activePointers.values());
+    const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    const currentMidpoint = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+    
+    if (initialPinchDist && initialPinchDist > 0) {
+      const newScale = Math.min(Math.max(initialPinchScale * (currentDist / initialPinchDist), 0.2), 5);
+      const rect = container.getBoundingClientRect();
+      const centerX = currentMidpoint.x - rect.left;
+      const centerY = currentMidpoint.y - rect.top;
+
+      // Hitung pergeseran (delta) posisi 2 jari untuk Pan
+      const deltaX = currentMidpoint.x - lastMidpoint.x;
+      const deltaY = currentMidpoint.y - lastMidpoint.y;
+
+      panX += deltaX;
+      panY += deltaY;
+
+      // Terapkan kalkulasi zoom berpusat pada titik tengah jari
+      panX = centerX - (centerX - panX) * (newScale / zoomScale);
+      panY = centerY - (centerY - panY) * (newScale / zoomScale);
+      zoomScale = newScale;
+
+      lastMidpoint = currentMidpoint;
+      updateViewportTransform();
+    }
+    return;
+  }
+
+  // 2. GESTUR 1 JARI
+  currentMousePos = getMousePos(e);
+  const p = currentMousePos;
+
+  if (isDraggingSymmetry) {
+    symmetryX = Math.max(0, Math.min(WIDTH, p.x)); // Batasi agar tetap di dalam canvas
+    drawOverlay();
+    return;
+  }
+
+  if (isPanning) {
+    panX = e.clientX - panStart.x;
+    panY = e.clientY - panStart.y;
+    updateViewportTransform();
+    return;
+  }
+
+  if (tools.current === 'transform' && activeLayer && activeLayer.transform) {
+    const t = activeLayer.transform;
+    if (isResizing) {
+      t.width = Math.max(20, p.x - t.x);
+      t.height = Math.max(20, p.y - t.y);
+      redrawLayerCanvas(activeLayer);
+    } else if (isTransforming) {
+      t.x = p.x - transformStart.x; t.y = p.y - transformStart.y;
+      redrawLayerCanvas(activeLayer);
+    }
+    drawOverlay();
+    return;
+  }
+
+  if (!isDrawing) { drawOverlay(); return; }
+
+  points.push(p);
+  const stabLevel = parseInt(document.getElementById('stabilizer').value);
+  if (points.length > stabLevel) points.shift();
+
+  let avgPoint = points.reduce((acc, curr) => ({ x: acc.x + curr.x, y: acc.y + curr.y }), { x: 0, y: 0 });
+  avgPoint.x /= points.length; avgPoint.y /= points.length;
+
+  if (tools.ruler === 'straight') {
+    drawOverlay();
+    rulerCtx.beginPath(); rulerCtx.moveTo(startPos.x, startPos.y); rulerCtx.lineTo(avgPoint.x, avgPoint.y);
+    rulerCtx.strokeStyle = 'red'; rulerCtx.lineWidth = 1 / zoomScale; rulerCtx.stroke();
+  } else if (tools.ruler === 'circle') {
+    drawOverlay();
+    rulerCtx.beginPath();
+    let r = Math.hypot(avgPoint.x - startPos.x, avgPoint.y - startPos.y);
+    rulerCtx.arc(startPos.x, startPos.y, r, 0, Math.PI * 2);
+    rulerCtx.strokeStyle = 'red'; rulerCtx.lineWidth = 1 / zoomScale; rulerCtx.stroke();
+  } else {
+    strokePoints.push(avgPoint);
+    const forceFade = document.getElementById('force-fade').checked;
+    if (tools.current === 'eraser' || !forceFade) {
+      drawSegment(startPos, avgPoint);
+      if (tools.ruler === 'symmetry') drawSegment({ x: 2 * symmetryX - startPos.x, y: startPos.y }, { x: 2 * symmetryX - avgPoint.x, y: avgPoint.y });
+      drawOverlay();
+    } else {
+      drawOverlay();
+      renderStrokeToCtx(rulerCtx, strokePoints, false);
+      if (tools.ruler === 'symmetry') {
+        const symPoints = strokePoints.map(pt => ({ x: 2 * symmetryX - pt.x, y: pt.y }));
+        renderStrokeToCtx(rulerCtx, symPoints, false);
+      }
+    }
+    startPos = avgPoint;
+  }
+});
+
+window.addEventListener('pointerup', (e) => {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size < 2) initialPinchDist = null;
+
+  if (isPanning) {
+    isPanning = false;
+    container.style.cursor = isSpacePressed ? 'grab' : 'crosshair';
+  }
+  isTransforming = false; isResizing = false;
+
+  if (!isDrawing) return;
+  isDrawing = false;
+  const ctx = activeLayer.ctx;
+  const forceFade = document.getElementById('force-fade').checked;
+
+  if (isDraggingSymmetry) {
+    isDraggingSymmetry = false;
+    return;
+  }
+
+  if (tools.ruler === 'straight') {
+    ctx.save();
+    if (tools.current === 'eraser') ctx.globalCompositeOperation = 'destination-out';
+    else ctx.strokeStyle = document.getElementById('brush-color').value;
+    ctx.lineWidth = document.getElementById('brush-size').value; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(startPos.x, startPos.y); ctx.lineTo(currentMousePos.x, currentMousePos.y); ctx.stroke();
+    ctx.restore();
+  } else if (tools.ruler === 'circle') {
+    ctx.save();
+    if (tools.current === 'eraser') ctx.globalCompositeOperation = 'destination-out';
+    else ctx.strokeStyle = document.getElementById('brush-color').value;
+    ctx.lineWidth = document.getElementById('brush-size').value; ctx.lineCap = 'round';
+    ctx.beginPath();
+    let r = Math.hypot(currentMousePos.x - startPos.x, currentMousePos.y - startPos.y);
+    ctx.arc(startPos.x, startPos.y, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  } else if (tools.current === 'brush' && forceFade) {
+    renderStrokeToCtx(ctx, strokePoints, true);
+    if (tools.ruler === 'symmetry') {
+      const symPoints = strokePoints.map(pt => ({ x: 2 * symmetryX - pt.x, y: pt.y }));
+      renderStrokeToCtx(ctx, symPoints, true);
+    }
+  }
+  drawOverlay();
+});
+
+function drawSegment(p1, p2) {
+  const ctx = activeLayer.ctx;
+  const baseSize = parseFloat(document.getElementById('brush-size').value);
+  const color = document.getElementById('brush-color').value;
+
+  ctx.save();
+  if (tools.current === 'eraser') {
+    ctx.globalCompositeOperation = 'destination-out';
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = color;
+  }
+
+  // Menggunakan interpolasi titik lingkaran supaya ukuran 1 ke 2 proporsional dan tidak loncat
+  let dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+  let steps = Math.max(Math.ceil(dist), 1);
+  
+  for (let s = 0; s <= steps; s++) {
+    let t = s / steps;
+    let currX = p1.x + (p2.x - p1.x) * t;
+    let currY = p1.y + (p2.y - p1.y) * t;
+    
+    ctx.beginPath();
+    ctx.arc(currX, currY, Math.max(baseSize, 0.5) / 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function toggleFadeSettings(show) {
+  document.getElementById('fade-settings-container').style.display = show ? 'flex' : 'none';
+}
+
+function renderStrokeToCtx(targetCtx, pts, isFinal = false) {
+  if (pts.length < 2) return;
+  const baseSize = parseFloat(document.getElementById('brush-size').value);
+  const color = document.getElementById('brush-color').value;
+  const useFade = document.getElementById('force-fade').checked;
+  
+  targetCtx.save();
+  targetCtx.globalCompositeOperation = 'source-over';
+  targetCtx.fillStyle = color;
+  
+  let totalLength = 0, lengths = [0];
+  for (let i = 1; i < pts.length; i++) {
+    totalLength += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+    lengths.push(totalLength);
+  }
+
+  let startFadeRatio = useFade ? parseFloat(document.getElementById('start-fade-pct').value) / 100 : 0;
+  let endFadeRatio = useFade ? parseFloat(document.getElementById('end-fade-pct').value) / 100 : 0;
+
+  for (let i = 0; i < pts.length - 1; i++) {
+    let p1 = pts[i], p2 = pts[i+1];
+    let dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    let steps = Math.max(Math.ceil(dist * 2), 1); // Kerapatan ditingkatkan 2x agar garis halus di ukuran kecil
+    
+    for (let s = 0; s <= steps; s++) {
+      let tSeg = s / steps;
+      let currX = p1.x + (p2.x - p1.x) * tSeg;
+      let currY = p1.y + (p2.y - p1.y) * tSeg;
+      let progress = totalLength > 0 ? (lengths[i] + dist * tSeg) / totalLength : 0;
+      
+      let scale = 1.0;
+      if (useFade) {
+        if (startFadeRatio > 0 && progress < startFadeRatio) {
+          scale = progress / startFadeRatio;
+        } else if (endFadeRatio > 0 && progress > (1 - endFadeRatio)) {
+          scale = (1 - progress) / endFadeRatio;
+        }
+      }
+
+      // Menggunakan radius presisi tanpa batasan minimal kaku 0.5 agar ukuran 1 dan 2 proporsional
+      let currentRadius = (baseSize * scale) / 2;
+      if (currentRadius < 0.2) currentRadius = 0.2;
+
+      targetCtx.beginPath();
+      targetCtx.arc(currX, currY, currentRadius, 0, Math.PI * 2);
+      targetCtx.fill();
+    }
+  }
+  targetCtx.restore();
+}
+
+function syncBrushSize(source, val) {
+  let numVal = parseFloat(val);
+  if (isNaN(numVal)) return;
+  
+  // Batasi nilai agar tetap aman
+  if (numVal < 0.1) numVal = 0.1;
+  if (numVal > 100) numVal = 100;
+
+  if (source === 'range') {
+    document.getElementById('size-num').value = numVal;
+  } else {
+    document.getElementById('brush-size').value = numVal;
+  }
+}
+
+function toggleLayerVisibility(item, event) {
+  event.stopPropagation(); // Mencegah agar layer tidak ikut terpilih (active) saat ikon mata diklik
+  item.visible = !item.visible;
+  if (item.canvas) {
+    item.canvas.style.display = item.visible !== false ? 'block' : 'none';
+  }
+  renderLayerUI();
+  drawOverlay();
+}
+
+window.onload = init;
+</script>
+</body>
+</html>
