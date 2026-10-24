@@ -221,6 +221,7 @@
           <button class="panel-btn" style="background: #28a745;" onclick="saveProject()">💾 Save</button>
           <button class="panel-btn" style="background: #17a2b8;" onclick="document.getElementById('project-input').click()">📂 Open</button>
         </div>
+        <button class="panel-btn" style="background: #4285F4; margin-top: 4px; width: 100%;" onclick="saveToGDrive()">☁️ Save to GDrive</button>
         <input type="file" id="project-input" accept=".paint,.json" onchange="loadProject(event)">
         <div class="btn-grid" style="margin-top: 4px;">
           <button class="panel-btn" onclick="exportImage('png')">🖼️ PNG</button>
@@ -1096,6 +1097,50 @@ function toggleLayerVisibility(item, event) {
   }
   renderLayerUI();
   drawOverlay();
+}
+
+// Ganti URL di bawah ini dengan URL Web App Google Apps Script milik Abang nanti
+const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwDC9tQI4-i9ms83Zoz5oZaSlwObUL20GFhCmgpHd_Ptf5ReGWaChikUZhkEf-yyZKqkg/exec";
+
+async function saveToGDrive() {
+  if (GAS_WEB_APP_URL === "https://script.google.com/macros/s/AKfycbwDC9tQI4-i9ms83Zoz5oZaSlwObUL20GFhCmgpHd_Ptf5ReGWaChikUZhkEf-yyZKqkg/exec") {
+    alert("URL Google Apps Script belum diatur di kodingan!");
+    return;
+  }
+
+  commitTransform();
+  const fileName = prompt("Masukkan nama file project:", `artwork_${Date.now()}.paint`);
+  if (!fileName) return;
+
+  const projectData = {
+    width: WIDTH, 
+    height: HEIGHT,
+    items: items.map(item => item.type === 'folder' ? 
+      { id: item.id, name: item.name, type: 'folder', visible: item.visible } : 
+      { id: item.id, name: item.name, type: 'layer', opacity: item.opacity, visible: item.visible, dataUrl: item.canvas.toDataURL() })
+  };
+
+  alert("Sedang mengunggah ke Google Drive...");
+
+  try {
+    const response = await fetch(GAS_WEB_APP_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: fileName.endsWith('.paint') ? fileName : fileName + '.paint',
+        fileContent: JSON.stringify(projectData)
+      })
+    });
+    
+    const result = await response.json();
+    if (result.status === 'success') {
+      alert("✅ Berhasil tersimpan di Google Drive (Folder: MiniWebPaint)!");
+      togglePanel('panel-file');
+    } else {
+      alert("❌ Gagal menyimpan: " + result.message);
+    }
+  } catch (err) {
+    alert("❌ Error koneksi ke Google Drive: " + err.message);
+  }
 }
 
 window.onload = init;
