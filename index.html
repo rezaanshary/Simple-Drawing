@@ -222,6 +222,7 @@
           <button class="panel-btn" style="background: #17a2b8;" onclick="document.getElementById('project-input').click()">📂 Open</button>
         </div>
         <button class="panel-btn" style="background: #4285F4; margin-top: 4px; width: 100%;" onclick="saveToGDrive()">☁️ Save to GDrive</button>
+        <button class="panel-btn" style="background: #009688; margin-top: 4px; width: 100%;" onclick="openFromGDrive()">📂 Open from GDrive</button>
         <input type="file" id="project-input" accept=".paint,.json" onchange="loadProject(event)">
         <div class="btn-grid" style="margin-top: 4px;">
           <button class="panel-btn" onclick="exportImage('png')">🖼️ PNG</button>
@@ -1140,6 +1141,50 @@ async function saveToGDrive() {
     }
   } catch (err) {
     alert("❌ Error koneksi ke Google Drive: " + err.message);
+  }
+}
+
+async function openFromGDrive() {
+  alert("Mengambil daftar file dari Google Drive...");
+  try {
+    const response = await fetch(GAS_WEB_APP_URL);
+    const result = await response.json();
+    
+    if (result.status === 'success') {
+      if (!result.files || result.files.length === 0) {
+        alert("Belum ada file tersimpan di folder MiniWebPaint.");
+        return;
+      }
+      
+      // Buat pilihan file sederhana via prompt / list
+      let fileListText = "Pilih nomor file yang ingin dibuka:\n\n";
+      result.files.forEach((file, index) => {
+        fileListText += `${index + 1}. ${file.name}\n`;
+      });
+      
+      let choice = prompt(fileListText);
+      if (!choice) return;
+      
+      let indexChoice = parseInt(choice) - 1;
+      if (isNaN(indexChoice) || indexChoice < 0 || indexChoice >= result.files.length) {
+        alert("Pilihan tidak valid!");
+        return;
+      }
+      
+      let selectedFile = result.files[indexChoice];
+      alert(`Mengunduh file: ${selectedFile.name}...`);
+      
+      // Ambil isi file berdasarkan ID
+      const fileResponse = await fetch(`${GAS_WEB_APP_URL}?id=${selectedFile.id}`);
+      const fileContentString = await fileResponse.text();
+      
+      parseAndLoadProjectData(fileContentString);
+      
+    } else {
+      alert("❌ Gagal mengambil daftar file: " + result.message);
+    }
+  } catch (err) {
+    alert("❌ Error koneksi: " + err.message);
   }
 }
 
