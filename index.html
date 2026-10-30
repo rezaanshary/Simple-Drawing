@@ -196,6 +196,7 @@
     </div>
     <div class="top-center">
       <button class="top-bar-btn" onclick="togglePanel('panel-canvas')">📐 Kanvas</button>
+      <span id="file-name-display" style="font-size: 13px; color: #aaa; margin-left: 8px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Untitled.paint">Untitled.paint</span>
     </div>
     <div class="top-right">
       <button class="top-bar-btn" style="background:#007acc;" onclick="togglePanel('panel-layers')">📑 Layer</button>
@@ -623,11 +624,14 @@ function saveProject() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = `artwork_${Date.now()}.paint`; a.click();
   togglePanel('panel-file');
+  const fileName = `artwork_${Date.now()}.paint`; // atau jika pakai prompt nama
+  updateFileNameDisplay(fileName);
 }
 
 function loadProject(e) {
   const file = e.target.files[0];
   if (!file) return;
+  updateFileNameDisplay(file.name);
   const reader = new FileReader();
   reader.onload = (event) => {
     try {
@@ -1113,6 +1117,8 @@ async function saveToGDrive() {
   const fileName = prompt("Masukkan nama file project:", `artwork_${Date.now()}.paint`);
   if (!fileName) return;
 
+  const finalName = fileName.endsWith('.paint') ? fileName : fileName + '.paint';
+
   const projectData = {
     width: WIDTH, 
     height: HEIGHT,
@@ -1173,12 +1179,14 @@ async function openFromGDrive() {
       
       let selectedFile = result.files[indexChoice];
       alert(`Mengunduh file: ${selectedFile.name}...`);
+
+      updateFileNameDisplay(selectedFile.name);
       
       // Ambil isi file berdasarkan ID
       const fileResponse = await fetch(`${GAS_WEB_APP_URL}?id=${selectedFile.id}`);
       const fileContentString = await fileResponse.text();
       
-      parseAndLoadProjectData(fileContentString);
+      parseAndLoadProjectData(fileContentString, selectedFile.name);
       
     } else {
       alert("❌ Gagal mengambil daftar file: " + result.message);
@@ -1188,8 +1196,10 @@ async function openFromGDrive() {
   }
 }
 
-function parseAndLoadProjectData(jsonString) {
+function parseAndLoadProjectData(jsonString, fileName = "Untitled.paint") {
   try {
+    updateFileNameDisplay(fileName);
+
     const project = JSON.parse(jsonString);
     items.forEach(item => { if (item.canvas) paper.removeChild(item.canvas); });
     items = []; activeLayer = null; undoStack = []; redoStack = []; updateUndoRedoUI();
@@ -1223,6 +1233,17 @@ function parseAndLoadProjectData(jsonString) {
     togglePanel('panel-file');
     alert("✅ Project berhasil dimuat dari Google Drive!");
   } catch (err) { alert("Format file project tidak valid!"); }
+}
+
+let currentFileName = "Untitled.paint";
+
+function updateFileNameDisplay(name) {
+  currentFileName = name;
+  const el = document.getElementById('file-name-display');
+  if (el) {
+    el.innerText = name;
+    el.title = name; // Tooltip saat kursor diarahkan ke nama file
+  }
 }
 
 window.onload = init;
